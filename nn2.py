@@ -6,7 +6,7 @@ import csv
 
 reg_lambda = 0.01
 learning_rate = 0.01
-load_model_from_file = False
+load_model_from_file = True
 
 
 def read_train(filename):
@@ -66,14 +66,6 @@ def derivatives_sigmoid(x):
     return x * (1 - x)
 
 
-X, y = read_train("train.csv")
-unison_shuffle(X, y)
-
-train_size = int(X.shape[0] * 0.7)
-train_X, test_X = X[:train_size], X[train_size:]
-train_y, test_y = y[:train_size], y[train_size:]
-test_y = numpy.argmax(test_y, axis=1)
-
 def cost_function(model, X, y):
     W1, b1, W2, b2 = model['W1'], model['b1'], model['W2'], model['b2']
     m = X.shape[0]
@@ -85,9 +77,24 @@ def cost_function(model, X, y):
     a3 = sigmoid(z3)
     hypothesis = a3
 
-    J = -1 / m * numpy.sum((y * numpy.log(hypothesis) + (1 - y) * numpy.log(1 - hypothesis)), axis=0) # m*k
-    J = J + reg_lambda / 2 / m * (numpy.sum(numpy.square(W1)) + numpy.sum(numpy.square(W2)))
-    return J
+    return numpy.sum(numpy.square(hypothesis - y))
+
+
+def cost_function_derivative(model, X, y):
+    W1, b1, W2, b2 = model['W1'], model['b1'], model['W2'], model['b2']
+    m = X.shape[0]
+
+    a1 = X
+    z2 = a1.dot(W1) + numpy.tile(b1, [m, 1])
+    a2 = sigmoid(z2)
+    z3 = a2.dot(W2) + numpy.tile(b2, [m, 1])
+    a3 = sigmoid(z3)
+    hypothesis = a3
+
+    dJ = -1 / m * numpy.sum((y * numpy.log(hypothesis) + (1 - y) * numpy.log(1 - hypothesis)), axis=0) # m*k
+    dJ = dJ + reg_lambda / 2 / m * (numpy.sum(numpy.square(W1)) + numpy.sum(numpy.square(W2)))
+    return dJ
+
 
 def predict(model, X):
     W1, b1, W2, b2 = model['W1'], model['b1'], model['W2'], model['b2']
@@ -107,31 +114,31 @@ def build_model(X, y, epochs=5000, print_cost=False):
     numpy.random.seed(123432)
 
     k = 10
-    m, n = train_X.shape
+    m, n = X.shape
     h = int(m / 2 / (n + k))
-
-    W1 = numpy.random.randn(n, h) / numpy.sqrt(n)
-    b1 = numpy.zeros((1, h))
-    W2 = numpy.random.randn(h, k) / numpy.sqrt(h)
-    b2 = numpy.zeros((1, k))
 
     if load_model_from_file:
         model = pickle.load(open("nn.b", "rb"))
     else:
+        W1 = numpy.random.randn(n, h) / numpy.sqrt(n)
+        b1 = numpy.zeros((1, h))
+        W2 = numpy.random.randn(h, k) / numpy.sqrt(h)
+        b2 = numpy.zeros((1, k))
+
         model = {'W1': W1, 'b1': b1, 'W2': W2, 'b2': b2}
 
     for i in range(epochs):
         print("iteration={}".format(i))
         W1, b1, W2, b2 = model['W1'], model['b1'], model['W2'], model['b2']
 
-        a1 = train_X # m*n
+        a1 = X # m*n
         z2 = a1.dot(W1) + numpy.tile(b1, [m, 1]) # m*h
         a2 = sigmoid(z2) # m*h
         z3 = a2.dot(W2) + numpy.tile(b2, [m, 1]) # m*k
         a3 = sigmoid(z3) # m*k
         hypothesis = a3 # m*k
 
-        delta3 = hypothesis - train_y # m*k б
+        delta3 = hypothesis - y # m*k б
         delta2 = numpy.dot(delta3, W2.T) * derivatives_sigmoid(a2)  #m*k*k*h *
 
         dW2 = 1 / m * numpy.dot(a2.T, delta3) # h*k triangle
@@ -156,6 +163,10 @@ def build_model(X, y, epochs=5000, print_cost=False):
     return model
 
 
+def cost_function_derivative(model, X, y):
+    return NotImplementedError
+
+
 def build_model_with_gradient_descent(model, X, y):
     numpy.random.seed(53916)
 
@@ -169,12 +180,38 @@ def build_model_with_gradient_descent(model, X, y):
     b2 = numpy.zeros((1, k))
 
     unrolled_parameters = numpy.concatenate((W1.ravel(),  b1.ravel(), W2.ravel(), b2.ravel()), axis=0)
-    scipy.optimize.fmin_cg(cost_function, unrolled_parameters, )
+    #scipy.optimize.fmin_cg(cost_function, unrolled_parameters, fprime=cost_function_derivative, args=)
 
 
-model = build_model(X, y, epochs=1000, print_cost=True)
-hypothesis = predict(model, test_X)
+def main():
+    X, y = read_train("train.csv")
+    unison_shuffle(X, y)
 
-accuracy = numpy.sum(numpy.equal(hypothesis, test_y)) / test_y.shape[0]
+    train_size = int(X.shape[0] * 0.7)
+    train_X, test_X = X[:train_size], X[train_size:]
+    train_y, test_y = y[:train_size], y[train_size:]
+    test_y = numpy.argmax(test_y, axis=1)
 
-pickle.dump(model, open("nn.b", "wb"))
+    model = build_model(X, y, epochs=100, print_cost=True)
+    hypothesis = predict(model, test_X)
+
+    accuracy = numpy.sum(numpy.equal(hypothesis, test_y)) / test_y.shape[0]
+    print("Accuracy={}".format(accuracy))
+
+    pickle.dump(model, open("nn.b", "wb"))
+
+
+def test():
+    model = pickle.load(open("nn.b", "rb"))
+    test_data = read_test("test.csv")
+    prediction = predict(model, test_data)
+
+    output = open("results.csv", "w")
+    output.write("ImageId, Label\n")
+    for i in range(len(prediction)):
+        output.write("{},{}\n".format(i + 1, prediction[i]))
+    output.close()
+
+
+if __name__ == "__main__":
+    main()
