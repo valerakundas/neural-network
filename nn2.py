@@ -1,6 +1,8 @@
+import random
 import pickle
 import scipy
 import numpy
+import time
 import math
 import csv
 
@@ -80,22 +82,6 @@ def cost_function(model, X, y):
     return numpy.sum(numpy.square(hypothesis - y))
 
 
-def cost_function_derivative(model, X, y):
-    W1, b1, W2, b2 = model['W1'], model['b1'], model['W2'], model['b2']
-    m = X.shape[0]
-
-    a1 = X
-    z2 = a1.dot(W1) + numpy.tile(b1, [m, 1])
-    a2 = sigmoid(z2)
-    z3 = a2.dot(W2) + numpy.tile(b2, [m, 1])
-    a3 = sigmoid(z3)
-    hypothesis = a3
-
-    dJ = -1 / m * numpy.sum((y * numpy.log(hypothesis) + (1 - y) * numpy.log(1 - hypothesis)), axis=0) # m*k
-    dJ = dJ + reg_lambda / 2 / m * (numpy.sum(numpy.square(W1)) + numpy.sum(numpy.square(W2)))
-    return dJ
-
-
 def predict(model, X):
     W1, b1, W2, b2 = model['W1'], model['b1'], model['W2'], model['b2']
     m = X.shape[0]
@@ -111,7 +97,7 @@ def predict(model, X):
 
 
 def build_model(X, y, epochs=5000, print_cost=False):
-    numpy.random.seed(123432)
+    numpy.random.seed(int(time.time()))
 
     k = 10
     m, n = X.shape
@@ -163,12 +149,24 @@ def build_model(X, y, epochs=5000, print_cost=False):
     return model
 
 
-def cost_function_derivative(model, X, y):
-    return NotImplementedError
+def cost_function(model, X, y):
+    W1, b1, W2, b2 = model['W1'], model['b1'], model['W2'], model['b2']
+
+    m = X.shape[0]
+
+    a1 = X  # m*n
+    z2 = a1.dot(W1) + numpy.tile(b1, [m, 1])  # m*h
+    a2 = sigmoid(z2)  # m*h
+    z3 = a2.dot(W2) + numpy.tile(b2, [m, 1])  # m*k
+    a3 = sigmoid(z3)  # m*k
+    hypothesis = a3  # m*k
+
+    error = numpy.sum(numpy.square(hypothesis - y))  # m*k
+    return error
 
 
 def build_model_with_gradient_descent(model, X, y):
-    numpy.random.seed(53916)
+    numpy.random.seed(int(time.time()))
 
     k = 10
     m, n = train_X.shape
@@ -180,7 +178,20 @@ def build_model_with_gradient_descent(model, X, y):
     b2 = numpy.zeros((1, k))
 
     unrolled_parameters = numpy.concatenate((W1.ravel(),  b1.ravel(), W2.ravel(), b2.ravel()), axis=0)
-    #scipy.optimize.fmin_cg(cost_function, unrolled_parameters, fprime=cost_function_derivative, args=)
+    scipy.optimize.fmin_cg(cost_function, unrolled_parameters, fprime=cost_function_derivative, args=(X, y))
+
+
+def test():
+    model = pickle.load(open("nn.b", "rb"))
+    test_data = read_test("test.csv")
+    prediction = predict(model, test_data)
+
+    output = open("results.csv", "w")
+    output.write("ImageId, Label\n")
+    for i in range(len(prediction)):
+        output.write("{},{}\n".format(i + 1, prediction[i]))
+    output.close()
+
 
 
 def main():
@@ -199,18 +210,6 @@ def main():
     print("Accuracy={}".format(accuracy))
 
     pickle.dump(model, open("nn.b", "wb"))
-
-
-def test():
-    model = pickle.load(open("nn.b", "rb"))
-    test_data = read_test("test.csv")
-    prediction = predict(model, test_data)
-
-    output = open("results.csv", "w")
-    output.write("ImageId, Label\n")
-    for i in range(len(prediction)):
-        output.write("{},{}\n".format(i + 1, prediction[i]))
-    output.close()
 
 
 if __name__ == "__main__":
